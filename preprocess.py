@@ -40,6 +40,12 @@ def determine_split(
     class_id = get_class_id_by_meta(meta)
     split = "train"
     total_number = total_count[class_id]
+    
+    # not enough samples for split
+    if total_number < 3:
+        current_count[class_id] += 1
+        return split
+
     current_number = current_count[class_id]
     val_index = max(1, total_number * val_split)
     test_index = val_index + max(1, total_number * test_split)
