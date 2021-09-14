@@ -1,5 +1,5 @@
 dataset:
-  path: "../data_segments/"
+  path: "/data_segments/"
 
 pipe:
   n_fft: 2048

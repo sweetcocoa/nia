@@ -65,3 +65,18 @@ cm = inference.get_confusion_matrix_of_dataset(config.dataset.path, config, spli
 inference.inference_audio("../data_segments/test/W_2_04/S-210909_W_204_D_001_0018_0.wav")
 # >>> ("W_2_04", 0.9865)
 ```
+
+### Docker Run
+```bash
+docker run \
+        -it \
+        --rm \
+        --gpus all \
+        -v /home/jonghochoi/docker/nia/data_midterm/:/data_midterm \
+        -v /home/jonghochoi/docker/nia/data_segments/:/data_segments \
+        nia:210914
+```
+```bash
+python preprocess.py --input /data_midterm/ --output /data_segments/
+python train.py
+```
