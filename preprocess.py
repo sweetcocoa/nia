@@ -44,7 +44,7 @@ def determine_split(
     # not enough samples for split
     if total_number < 3:
         current_count[class_id] += 1
-        return split
+        return "val"
 
     current_number = current_count[class_id]
     val_index = max(1, total_number * val_split)
