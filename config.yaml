@@ -1,0 +1,18 @@
+dataset:
+  path: "../data_segments/"
+
+pipe:
+  n_fft: 2048
+  hop_length: 256
+  sample_rate: 16000
+  target_frame_length: 64
+  n_mels: 128
+  min_audio_sample_length: 16384
+
+training:
+  batch_size: 128
+  num_workers: 8
+  max_epochs: 100
+  log_every_n_steps: 5
+  learning_rate: 0.001
+

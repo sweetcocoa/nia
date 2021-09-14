@@ -2,7 +2,9 @@ import glob
 import os
 import shutil
 import multiprocessing
+import warnings
 from joblib import Parallel, delayed
+from collections import defaultdict
 
 import numpy as np
 import librosa
@@ -10,47 +12,58 @@ import soundfile
 from tqdm import tqdm
 from omegaconf import OmegaConf
 
-from .config import Config
-
 
 def load_meta(meta_file):
     meta = OmegaConf.load(meta_file)
     return meta
 
 
-def process_meta(meta_file, output):
+def get_class_id_by_meta(meta):
+    lcfg = meta["LabelDataInfo"]
+    return f"{lcfg.Division1}_{lcfg.Division2}_{lcfg.Class}"
+
+
+def count_samples_per_class(meta_dir):
+    data_count_dict = defaultdict(int)
+    meta_files = get_meta_files_from(meta_dir, verbose=False)
+    for meta_file in tqdm(meta_files):
+        meta = OmegaConf.load(meta_file)
+        class_id = get_class_id_by_meta(meta)
+        data_count_dict[class_id] += 1
+    return data_count_dict
+
+
+def determine_split(
+    meta_file, total_count, current_count, val_split=0.1, test_split=0.1
+):
     meta = load_meta(meta_file)
+    class_id = get_class_id_by_meta(meta)
+    split = "train"
+    total_number = total_count[class_id]
+    current_number = current_count[class_id]
+    val_index = max(1, total_number * val_split)
+    test_index = val_index + max(1, total_number * test_split)
 
-    # TODO 구버전 json 하위호환.. 공백 없는 것이 최종임.
-    label_meta = (
-        meta["Label data info"] if "Label data info" in meta else meta["LabelDataInfo"]
-    )
+    if current_number < val_index:
+        split = "val"
+    elif current_number < test_index:
+        split = "test"
 
+    current_count[class_id] += 1
+    return split
+
+
+def process_meta(meta_file, output, split="val"):
+    meta = load_meta(meta_file)
+    class_id = get_class_id_by_meta(meta)
+    label_meta = meta["LabelDataInfo"]
     audio_file = meta_file.replace(".json", ".mp3")
-    y, sr = librosa.load(audio_file, sr=Config.sample_rate, mono=True)
+
+    warnings.filterwarnings("ignore")
+    y, sr = librosa.load(audio_file, sr=16000, mono=True)
 
     # TODO : Train/Validation Split은 sample 기준으로 대략 8:2 지향, 어느 split에 속하는지는 파이썬 내장 hash함수 이용
-    # 현재 : 그냥 파일명기준 클래스당 제일 먼저 오는 샘플파일 1개가 Validation set이 됨
-    class_id = f"{label_meta.Division1}_{label_meta.Division2}_{label_meta.Class}"
-    if os.path.exists(
-        os.path.join(
-            output,
-            "val",
-            class_id,
-        )
-    ):
-        # if hash(os.path.basename(meta_file)) % 5 != 0:
-        output_dir = os.path.join(
-            output,
-            "train",
-            class_id,
-        )
-    else:
-        output_dir = os.path.join(
-            output,
-            "val",
-            class_id,
-        )
+    output_dir = os.path.join(output, split, class_id)
     os.makedirs(output_dir, exist_ok=True)
 
     for i, interval in enumerate(label_meta.Segmentations):
@@ -77,27 +90,40 @@ def remove_invalid_class(output_dir, verbose=True):
     개수가 적어서 validation에만 있는 클래스 데이터는 삭제.
     """
     train_ids = os.listdir(os.path.join(output_dir, "train"))
-    for class_id in os.listdir(os.path.join(output_dir, "val")):
+    valid_ids = os.listdir(os.path.join(output_dir, "val"))
+    for class_id in valid_ids:
         if class_id not in train_ids:
             shutil.rmtree(os.path.join(output_dir, "val", class_id))
             if verbose:
                 print("Removed ", class_id)
+
+    if verbose:
+        print("::Original::")
+        print(f"train_ids {len(train_ids)}\nclass_ids {len(valid_ids)}")
 
 
 def main(meta_dir, output_dir, verbose=True):
     meta_files = get_meta_files_from(meta_dir, verbose=verbose)
     assert len(meta_files) > 0, "Not enough metafiles"
 
+    total_count = count_samples_per_class(meta_dir)
+    current_count = defaultdict(int)
+    if verbose:
+        print("Samples per class :", total_count)
+
     def meta_iterator():
         pbar = tqdm(meta_files)
         for meta_file in pbar:
             pbar.set_description(meta_file)
-            yield meta_file, output_dir
+            split = determine_split(
+                meta_file, total_count=total_count, current_count=current_count
+            )
+            yield meta_file, output_dir, split
 
     # TODO : data 늘어나면 data split 바꾸고 n_jobs 늘리기
-    num_segments = Parallel(n_jobs=1)(
-        delayed(process_meta)(meta_file, output_dir)
-        for meta_file, output_dir in meta_iterator()
+    num_segments = Parallel(n_jobs=multiprocessing.cpu_count())(
+        delayed(process_meta)(meta_file, output_dir, split)
+        for meta_file, output_dir, split in meta_iterator()
     )
 
     print("# of segments :", sum(num_segments))

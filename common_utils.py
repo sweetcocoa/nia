@@ -5,14 +5,27 @@ import random
 
 
 class AudioToMelPipe:
-    def __init__(self, is_validation=True):
+    def __init__(
+        self,
+        sample_rate=16000,
+        n_fft=2048,
+        hop_length=512,
+        n_mels=128,
+        random_split=True,
+    ):
         self.melspectrogram = torchaudio.transforms.MelSpectrogram(
-            sample_rate=16000, n_fft=2048, hop_length=256, f_min=10.0, n_mels=128
+            sample_rate=sample_rate,
+            n_fft=n_fft,
+            hop_length=hop_length,
+            f_min=10.0,
+            n_mels=n_mels,
         )
-        self.is_validation = is_validation
+        self.random_split = random_split
 
-    def load_audio(self, path, target_frame_length):
+    def load_audio(self, path, target_frame_length=None, min_audio_sample_length=1.024):
         y, sr = torchaudio.load(path, normalize=True)
+        if y.shape[1] < min_audio_sample_length:
+            y = torch.nn.functional.pad(y, (0, min_audio_sample_length - y.shape[1]))
         melspec = self.melspectrogram(y)
         if target_frame_length is None:
             return melspec
@@ -25,7 +38,7 @@ class AudioToMelPipe:
             right_pad = (target_frame_length - melspec.shape[-1]) - left_pad
             melspec = torch.nn.functional.pad(melspec, (left_pad, right_pad))
         elif melspec.shape[-1] > target_frame_length:
-            if self.is_validation:
+            if not self.random_split:
                 offset = 0
             else:
                 offset = random.randint(0, melspec.shape[-1] - target_frame_length - 1)

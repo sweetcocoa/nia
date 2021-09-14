@@ -1,47 +1,66 @@
-import random
-import sys
-import argparse
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torchvision import datasets
-from torchvision.models import resnet18
 
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import ModelCheckpoint
+from omegaconf import OmegaConf
 from flash.core.classification import ClassificationTask
 
 from model import SimpleAudioClassificationModel
-from audio_to_mel_pipe import AudioToMelPipe
+from training_utils import extract_logs, get_dataset
 
 
-def main(args):
-    def get_dataset(phase, target_frame_length, extensions=(".wav",)):
-        datapipe = AudioToMelPipe(is_validation=(phase == "val"))
-        return datasets.DatasetFolder(
-            f"{args.data_path}/{phase}/",
-            loader=lambda x: datapipe.load_audio(
-                x, target_frame_length=target_frame_length
-            ),
-            transform=None,
-            extensions=extensions,
-        )
+def main(config):
 
-    dataset_train = get_dataset(phase="train", target_frame_length=64)
-    dataset_val = get_dataset(phase="val", target_frame_length=64)
-    dataset_test = get_dataset(phase="val", target_frame_length=None)
+    dataset_train = get_dataset(
+        config.dataset.path,
+        phase="train",
+        pipe_config=config.pipe,
+    )
+    dataset_val = get_dataset(
+        config.dataset.path,
+        phase="val",
+        pipe_config=config.pipe,
+    )
+    dataset_test = get_dataset(
+        config.dataset.path,
+        phase="test",
+        pipe_config=config.pipe,
+    )
+
+    print(
+        f"""
+Dataset Summary:
+# of train : {len(dataset_train)},
+# of val : {len(dataset_val)},
+# of test : {len(dataset_test)},
+"""
+    )
+
+    assert (
+        len(dataset_train.classes)
+        == len(dataset_val.classes)
+        == len(dataset_test.classes)
+    )
 
     dataloader_train = DataLoader(
-        dataset_train, batch_size=24, shuffle=True, num_workers=4
+        dataset_train,
+        batch_size=config.training.batch_size,
+        shuffle=True,
+        num_workers=config.training.num_workers,
     )
-    dataloader_val = DataLoader(dataset_val, batch_size=24, num_workers=4)
+    dataloader_val = DataLoader(
+        dataset_val,
+        batch_size=config.training.batch_size,
+        num_workers=config.training.num_workers,
+    )
     dataloader_test = DataLoader(dataset_test, batch_size=1, num_workers=0)
 
     ckpt_callback = ModelCheckpoint(
-        monitor="val_accuracy",
-        filename="model-{epoch:04d}-{val_accuracy:.3f}",
+        monitor="val_f1",
+        filename="model-{epoch:04d}-{val_f1:.3f}",
         save_top_k=1,
         mode="max",
         save_last=True,
@@ -49,17 +68,20 @@ def main(args):
 
     model = SimpleAudioClassificationModel(num_classes=len(dataset_val.classes))
 
+    # multi_label=True, num_class 가 specify됐을 때 f1 metric이 사용됨.
     classifier = ClassificationTask(
         model,
         loss_fn=nn.functional.cross_entropy,
+        num_classes=len(dataset_val.classes),
+        multi_label=True,
         optimizer=optim.Adam,
-        learning_rate=1e-3,
+        learning_rate=config.training.learning_rate,
     )
 
     trainer = pl.Trainer(
-        max_epochs=100,
+        max_epochs=config.training.max_epochs,
         gpus=1,
-        log_every_n_steps=5,
+        log_every_n_steps=config.training.log_every_n_steps,
         callbacks=ckpt_callback,
     )
 
@@ -71,9 +93,14 @@ def main(args):
 
     print(results)
 
+    extract_logs(classifier.logger.log_dir, classifier.logger.log_dir)
+
+    print(f"Training logs are successfully exported at {classifier.logger.log_dir}")
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--data_path", type=str, required=True)
-    args = parser.parse_args()
-    main(args)
+    config = OmegaConf.load("config.yaml")
+    config.merge_with_cli()
+    print("hparams")
+    print(OmegaConf.to_yaml(config))
+    main(config)
