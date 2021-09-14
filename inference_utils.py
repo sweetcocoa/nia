@@ -97,7 +97,7 @@ class Inference:
 
         def save_confusion_matrix(confusion_matrix, index, output_dir):
             df_cm = pd.DataFrame(confusion_matrix, index=index, columns=index)
-            plt.figure(figsize=(10, 7))
+            plt.figure(figsize=(20, 14))
             sn.heatmap(df_cm, annot=True)
             plt.savefig(os.path.join(output_dir, "confusion_matrix.jpg"))
 
@@ -107,3 +107,23 @@ class Inference:
             output_dir=output_dir,
         )
         return confusion_matrix
+
+
+if __name__ == "__main__":
+    from omegaconf import OmegaConf
+
+    config = OmegaConf.load("config.yaml")
+    config.merge_with_cli()
+    if config.checkpoint is None:
+        print("""Usage:
+python inference_utils.py checkpoint=/path/to/ckpt
+""")
+        checkpoint = "lightning_logs/version_0/checkpoints/last.ckpt"
+    else:
+        checkpoint = config.checkpoint
+    
+    inference = Inference(checkpoint, config)
+
+    cm = inference.get_confusion_matrix_of_dataset(config.dataset.path, config)
+    print("Confusion matrix (Image can be seen at current folder)")
+    print(cm)

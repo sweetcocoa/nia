@@ -2,6 +2,23 @@
 ---
 ## Scripts
 
+### Docker Run
+```bash
+docker run \
+        -it \
+        --rm \
+        --gpus all \
+        -v /home/jonghochoi/docker/nia/data_midterm/:/data_midterm \
+        -v /home/jonghochoi/docker/nia/data_segments/:/data_segments \
+        -p 0.0.0.0:9015:9015 \
+        nia:210914
+```
+```bash
+python preprocess.py --input /data_midterm/ --output /data_segments/
+python train.py
+python inference_utils.py checkpoint=/path/to/ckpt
+```
+
 ### Preprocess Audio (Extract Audio Segments, split data)
 
 ```bash
@@ -46,10 +63,22 @@ python train.py dataset.path=/path/to/segment_data/ training.batch_size=128
 
 ### Tensorboard
 ```bash
-tensorboard --logdir lightning_logs/
+tensorboard --logdir lightning_logs/ --bind_all --port 9015
+```
+
+### Jupyter Lab
+```bash
+jupyter lab --allow-root --port 9015 --no-browser --bind_all
 ```
 
 ### Inference
+- Script
+```bash
+python inference_utils.py checkpoint=lightning_logs/version_0/checkpoints/model-epoch\=0031-val_f1\=0.621.ckpt
+# Image file : confusion_matrix.jpg will be created in current folder.
+```
+
+- Code
 ```python
 from omegaconf import OmegaConf
 from inference_utils import Inference
@@ -64,19 +93,4 @@ cm = inference.get_confusion_matrix_of_dataset(config.dataset.path, config, spli
 # inference one audio
 inference.inference_audio("../data_segments/test/W_2_04/S-210909_W_204_D_001_0018_0.wav")
 # >>> ("W_2_04", 0.9865)
-```
-
-### Docker Run
-```bash
-docker run \
-        -it \
-        --rm \
-        --gpus all \
-        -v /home/jonghochoi/docker/nia/data_midterm/:/data_midterm \
-        -v /home/jonghochoi/docker/nia/data_segments/:/data_segments \
-        nia:210914
-```
-```bash
-python preprocess.py --input /data_midterm/ --output /data_segments/
-python train.py
 ```
