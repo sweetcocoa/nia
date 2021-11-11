@@ -8,16 +8,16 @@ docker run \
         -it \
         --rm \
         --gpus all \
-        -v /home/jonghochoi/docker/nia/data_midterm/:/data_midterm \
-        -v /home/jonghochoi/docker/nia/data_segments/:/data_segments \
-        -v /home/jonghochoi/docker/nia/lightning_logs/:/lightning_logs \
+        -v ${DATA_FOLDER}:/data_midterm \
+        -v ${PREPROCESS_FOLDER}:/data_segments \
+        -v ${LOG_FOLDER}:/lightning_logs \
         -p 0.0.0.0:9015:9015 \
-        nia:210914
+        nia:211111
 ```
 ```bash
 python preprocess.py --input /data_midterm/ --output /data_segments/
 python train.py
-python inference_utils.py checkpoint=/path/to/ckpt
+python inference_utils.py --checkpoint /path/to/ckpt.pth
 ```
 
 ### Preprocess Audio (Extract Audio Segments, split data)
@@ -56,6 +56,12 @@ segment_data/
         ...
 ```
 
+### Reproduce All the Results
+```bash
+bash runme_to_training.sh
+bash runme_to_inference.sh
+```
+
 ### Training
 
 ```bash
@@ -76,22 +82,5 @@ jupyter lab --allow-root --port 9015 --no-browser --ip 0.0.0.0
 - Script
 ```bash
 python inference_utils.py checkpoint=lightning_logs/version_0/checkpoints/model-epoch\=0031-val_f1\=0.621.ckpt
-# Image file : confusion_matrix.jpg will be created in current folder.
-```
-
-- Code
-```python
-from omegaconf import OmegaConf
-from inference_utils import Inference
-
-config = OmegaConf.load("config.yaml")
-inference = Inference("lightning_logs/version_0/checkpoints/model-epoch=0072-val_f1=0.872.ckpt", config)
-
-# get confusion matrix (class-wise performance)
-cm = inference.get_confusion_matrix_of_dataset(config.dataset.path, config, split='test', output_dir=".")
-# >>> 
-
-# inference one audio
-inference.inference_audio("../data_segments/test/W_2_04/S-210909_W_204_D_001_0018_0.wav")
-# >>> ("W_2_04", 0.9865)
+# Image file : confusion_matrix.jpg will be created in version folder.
 ```
