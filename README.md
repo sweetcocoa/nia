@@ -10,6 +10,7 @@ docker run \
         --gpus all \
         -v /home/jonghochoi/docker/nia/data_midterm/:/data_midterm \
         -v /home/jonghochoi/docker/nia/data_segments/:/data_segments \
+        -v /home/jonghochoi/docker/nia/lightning_logs/:/lightning_logs \
         -p 0.0.0.0:9015:9015 \
         nia:210914
 ```
@@ -68,7 +69,7 @@ tensorboard --logdir lightning_logs/ --bind_all --port 9015
 
 ### Jupyter Lab
 ```bash
-jupyter lab --allow-root --port 9015 --no-browser --bind_all
+jupyter lab --allow-root --port 9015 --no-browser --ip 0.0.0.0
 ```
 
 ### Inference

@@ -1,5 +1,8 @@
+model: "resnet18"
+
 dataset:
   path: "/data_segments/"
+  use_major_class: True
 
 pipe:
   n_fft: 2048
@@ -13,6 +16,6 @@ training:
   batch_size: 128
   num_workers: 8
   max_epochs: 100
-  log_every_n_steps: 5
+  log_every_n_steps: 10
   learning_rate: 0.001
-
+  logdir: "/lightning_logs/"

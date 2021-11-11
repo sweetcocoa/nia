@@ -23,9 +23,15 @@ def get_class_id_by_meta(meta):
     return f"{lcfg.Division1}_{lcfg.Division2}_{lcfg.Class}"
 
 
-def count_samples_per_class(meta_dir):
+def get_segments_by_meta(meta):
+    lcfg = meta["LabelDataInfo"]
+    return lcfg.Segmentations
+
+
+def count_samples_per_class(meta_dir, meta_files=None):
     data_count_dict = defaultdict(int)
-    meta_files = get_meta_files_from(meta_dir, verbose=False)
+    if meta_files is None:
+        meta_files = get_meta_files_from(meta_dir, verbose=False)
     for meta_file in tqdm(meta_files):
         meta = OmegaConf.load(meta_file)
         class_id = get_class_id_by_meta(meta)
@@ -33,14 +39,26 @@ def count_samples_per_class(meta_dir):
     return data_count_dict
 
 
+def count_segments_per_class(meta_dir, meta_files=None):
+    data_count_dict = defaultdict(int)
+    if meta_files is None:
+        meta_files = get_meta_files_from(meta_dir, verbose=False)
+    for meta_file in tqdm(meta_files):
+        meta = OmegaConf.load(meta_file)
+        class_id = get_class_id_by_meta(meta)
+        num_segments = len(get_segments_by_meta(meta))
+        data_count_dict[class_id] += num_segments
+    return data_count_dict
+
+
 def determine_split(
-    meta_file, total_count, current_count, val_split=0.1, test_split=0.1
+    meta_file, total_sample_count, current_count, val_split=0.1, test_split=0.1
 ):
     meta = load_meta(meta_file)
     class_id = get_class_id_by_meta(meta)
     split = "train"
-    total_number = total_count[class_id]
-    
+    total_number = total_sample_count[class_id]
+
     # not enough samples for split
     if total_number < 3:
         current_count[class_id] += 1
@@ -91,38 +109,56 @@ def get_meta_files_from(meta_dir, verbose=True):
     return meta_files
 
 
+def print_pretty_dict(dic):
+    list_dic = sorted([(k, v) for k, v in dic.items()], key=lambda x: x[0])
+    string = str()
+    for k, v in list_dic:
+        string += f"{k}: {v}\n"
+    return string
+
+
 def remove_invalid_class(output_dir, verbose=True):
     """
     개수가 적어서 validation에만 있는 클래스 데이터는 삭제.
     """
     train_ids = os.listdir(os.path.join(output_dir, "train"))
     valid_ids = os.listdir(os.path.join(output_dir, "val"))
+    if verbose:
+        print("삭제된 id 목록")
     for class_id in valid_ids:
         if class_id not in train_ids:
             shutil.rmtree(os.path.join(output_dir, "val", class_id))
             if verbose:
-                print("Removed ", class_id)
+                print(class_id)
 
     if verbose:
-        print("::Original::")
-        print(f"train_ids {len(train_ids)}\nclass_ids {len(valid_ids)}")
+        print(f"학습용데이터ids: {len(train_ids)}\n원본데이터ids: {len(valid_ids)}")
 
 
 def main(meta_dir, output_dir, verbose=True):
     meta_files = get_meta_files_from(meta_dir, verbose=verbose)
     assert len(meta_files) > 0, "Not enough metafiles"
 
-    total_count = count_samples_per_class(meta_dir)
+    total_sample_count = count_samples_per_class(meta_dir, meta_files=meta_files)
+    total_segment_count = count_segments_per_class(meta_dir, meta_files=meta_files)
+
     current_count = defaultdict(int)
     if verbose:
-        print("Samples per class :", total_count)
+        print(
+            "Samples per class", print_pretty_dict(dict(total_sample_count)), sep="\n"
+        )
+        print(
+            "Segments per class", print_pretty_dict(dict(total_segment_count)), sep="\n"
+        )
 
     def meta_iterator():
         pbar = tqdm(meta_files)
         for meta_file in pbar:
             pbar.set_description(meta_file)
             split = determine_split(
-                meta_file, total_count=total_count, current_count=current_count
+                meta_file,
+                total_sample_count=total_sample_count,
+                current_count=current_count,
             )
             yield meta_file, output_dir, split
 

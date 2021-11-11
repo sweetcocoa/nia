@@ -44,3 +44,8 @@ class AudioToMelPipe:
                 offset = random.randint(0, melspec.shape[-1] - target_frame_length - 1)
             melspec = melspec[..., offset : offset + target_frame_length]
         return melspec
+
+
+def get_major_class_by_class_name(cls_name):
+    "A_1_2 -> A"
+    return cls_name.split("_")[0]
