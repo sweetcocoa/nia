@@ -1,6 +1,5 @@
 import os
 import matplotlib.pyplot as plt
-from numpy.lib.arraysetops import isin
 import seaborn as sn
 import pandas as pd
 
@@ -13,6 +12,7 @@ from audiodataset import AudioDataset
 from common_utils import AudioToMelPipe, get_major_class_by_class_name
 from training_utils import get_dataset
 from model import SimpleAudioClassificationModel
+from sklearn.metrics import f1_score
 
 
 class Inference:
@@ -100,20 +100,21 @@ class Inference:
             use_major_class=config.dataset.use_major_class,
         )
         dataloader_test = DataLoader(test_dataset, batch_size=1, num_workers=0)
-        metric = torchmetrics.Accuracy(num_classes=len(test_dataset.class_to_idx))
+        metric = torchmetrics.Accuracy(num_classes=len(self.class_to_idx))
         conf_normal = torchmetrics.ConfusionMatrix(
-            len(test_dataset.class_to_idx), normalize="true"
+            len(self.class_to_idx), normalize="true"
         )
 
-        conf = torchmetrics.ConfusionMatrix(
-            len(test_dataset.class_to_idx), normalize=None
-        )
+        conf = torchmetrics.ConfusionMatrix(len(self.class_to_idx), normalize=None)
 
         metric = metric.to(self.device)
         conf_normal = conf_normal.to(self.device)
         conf = conf.to(self.device)
 
         correct, total = 0, 0
+        label_list = list()
+        pred_list = list()
+
         with torch.no_grad():
             for img, label in dataloader_test:
                 img, label = img.to(self.device), label.to(self.device)
@@ -123,12 +124,22 @@ class Inference:
                 metric(pred, label)
                 conf(pred, label)
                 conf_normal(pred, label)
+
+                label_list.extend(label.cpu().tolist())
+                pred_list.extend(pred.argmax(dim=-1).cpu().tolist())
+
             metric.compute()
             conf.compute()
             conf_normal.compute()
 
         confusion_matrix = conf.compute().cpu().numpy()
         confusion_matrix_normal = conf_normal.compute().cpu().numpy()
+
+        f1_cls = f1_score(label_list, pred_list, average=None)
+
+        with open(os.path.join(output_dir, "class_wise_performance.txt"), "w") as f:
+            for i, f1 in enumerate(f1_cls):
+                f.write(f"{self.idx_to_class[i]}, {f1}\n")
 
         def save_confusion_matrix(
             confusion_matrix, index, output_dir, filename="confusion_matrix.jpg"
@@ -140,14 +151,14 @@ class Inference:
 
         save_confusion_matrix(
             confusion_matrix=confusion_matrix,
-            index=list(test_dataset.class_to_idx.keys()),
+            index=list(self.class_to_idx.keys()),
             output_dir=output_dir,
             filename="confusion_matrix.jpg",
         )
 
         save_confusion_matrix(
             confusion_matrix=confusion_matrix_normal,
-            index=list(test_dataset.class_to_idx.keys()),
+            index=list(self.class_to_idx.keys()),
             output_dir=output_dir,
             filename="confusion_matrix_normal.jpg",
         )
