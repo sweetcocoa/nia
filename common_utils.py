@@ -1,49 +1,58 @@
+from threading import main_thread
+from torch.nn.modules import normalization
 import torchaudio
 import torch
-import torch.nn
+import torch.nn as nn
 import random
 
 
-class AudioToMelPipe:
-    def __init__(
-        self,
-        sample_rate=16000,
-        n_fft=2048,
-        hop_length=512,
-        n_mels=128,
-        random_split=True,
-    ):
+class LogMelSpectrogram(nn.Module):
+    def __init__(self, pipe_config) -> None:
+        super().__init__()
         self.melspectrogram = torchaudio.transforms.MelSpectrogram(
-            sample_rate=sample_rate,
-            n_fft=n_fft,
-            hop_length=hop_length,
+            sample_rate=pipe_config.sample_rate,
+            n_fft=pipe_config.n_fft,
+            hop_length=pipe_config.hop_length,
             f_min=10.0,
-            n_mels=n_mels,
+            n_mels=pipe_config.n_mels,
         )
-        self.random_split = random_split
+        self.use_log = pipe_config.use_log
 
-    def load_audio(self, path, target_frame_length=None, min_audio_sample_length=1.024):
-        y, sr = torchaudio.load(path, normalize=True)
-        if y.shape[1] < min_audio_sample_length:
-            y = torch.nn.functional.pad(y, (0, min_audio_sample_length - y.shape[1]))
-        melspec = self.melspectrogram(y)
-        if target_frame_length is None:
-            return melspec
+    def forward(self, x):
+        # x : audio(batch, sample)
+        # X : melspec (batch, freq, frame)
+        with torch.no_grad():
+            with torch.cuda.amp.autocast(enabled=False):
+                X = self.melspectrogram(x)
+                if self.use_log:
+                    X = X.clamp(min=1e-6).log()
+        return X
+
+
+def audio_load(
+    path,
+    target_audio_sample_length=None,
+    min_audio_sample_length=16384,
+    random_split=False,
+):
+    # target_frame_length = audio_length // hop_size + 1
+    # audio_length = (target_frame_length - 1) * hop_size
+
+    y, sr = torchaudio.load(path, normalize=True)
+    y = y[0]
+    if y.shape[0] < min_audio_sample_length:
+        y = torch.nn.functional.pad(y, (0, min_audio_sample_length - y.shape[0]))
+
+    if target_audio_sample_length is None:
+        return y
+    else:
+        if random_split:
+            offset = random.randint(0, y.shape[-1] - target_audio_sample_length - 1)
         else:
-            return self.pad_melspec(melspec, target_frame_length)
+            offset = 0
+        y = y[offset : offset + target_audio_sample_length]
 
-    def pad_melspec(self, melspec, target_frame_length):
-        if melspec.shape[-1] < target_frame_length:
-            left_pad = (target_frame_length - melspec.shape[-1]) // 2
-            right_pad = (target_frame_length - melspec.shape[-1]) - left_pad
-            melspec = torch.nn.functional.pad(melspec, (left_pad, right_pad))
-        elif melspec.shape[-1] > target_frame_length:
-            if not self.random_split:
-                offset = 0
-            else:
-                offset = random.randint(0, melspec.shape[-1] - target_frame_length - 1)
-            melspec = melspec[..., offset : offset + target_frame_length]
-        return melspec
+    return y
 
 
 def get_major_class_by_class_name(cls_name):

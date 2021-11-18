@@ -2,17 +2,17 @@ import os
 import matplotlib.pyplot as plt
 import seaborn as sn
 import pandas as pd
+from sklearn.metrics import f1_score
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 import torchmetrics
-from audiodataset import AudioDataset
 
-from common_utils import AudioToMelPipe, get_major_class_by_class_name
+from common_utils import audio_load
 from training_utils import get_dataset
 from model import SimpleAudioClassificationModel
-from sklearn.metrics import f1_score
 
 
 class Inference:
@@ -26,14 +26,6 @@ class Inference:
     ):
 
         pipe_config = config.pipe
-
-        self.pipe = AudioToMelPipe(
-            sample_rate=pipe_config.sample_rate,
-            n_fft=pipe_config.n_fft,
-            hop_length=pipe_config.hop_length,
-            n_mels=pipe_config.n_mels,
-            random_split=False,
-        )
 
         if class_to_idx is None or idx_to_class is None:
             log_dir = os.path.dirname(os.path.dirname(checkpoint_path))
@@ -63,7 +55,7 @@ class Inference:
             return model_state_dict
 
         model = SimpleAudioClassificationModel(
-            len(self.class_to_idx), model=config.model
+            len(self.class_to_idx), pipe_config=config.pipe, model=config.model
         )
         experiment_state_dict = torch.load(checkpoint_path)
         model_state_dict = build_weight_only(experiment_state_dict)
@@ -73,16 +65,16 @@ class Inference:
 
     def inference_audio(self, audio_path):
         with torch.no_grad():
-            melspectrogram = (
-                self.pipe.load_audio(
+            audio = (
+                audio_load(
                     audio_path,
-                    target_frame_length=None,
+                    target_audio_sample_length=None,
                     min_audio_sample_length=self.min_audio_sample_length,
                 )
                 .unsqueeze(0)
                 .to(self.device)
             )
-            logits = self.model(melspectrogram)
+            logits = self.model(audio)
             index = nn.functional.softmax(logits, dim=-1).argmax().item()
             probabilities = nn.functional.softmax(logits, dim=-1)
 
@@ -116,7 +108,7 @@ class Inference:
         pred_list = list()
 
         with torch.no_grad():
-            for img, label in dataloader_test:
+            for img, label in tqdm(dataloader_test):
                 img, label = img.to(self.device), label.to(self.device)
                 pred = torch.softmax(self.model(img), dim=-1)
                 correct += (pred.argmax(dim=-1) == label).sum()
@@ -142,11 +134,15 @@ class Inference:
                 f.write(f"{self.idx_to_class[i]}, {f1}\n")
 
         def save_confusion_matrix(
-            confusion_matrix, index, output_dir, filename="confusion_matrix.jpg"
+            confusion_matrix,
+            index,
+            output_dir,
+            filename="confusion_matrix.jpg",
+            fmt=".3f",
         ):
             df_cm = pd.DataFrame(confusion_matrix, index=index, columns=index)
             plt.figure(figsize=(30, 21))
-            sn.heatmap(df_cm, annot=True)
+            sn.heatmap(df_cm, annot=True, fmt=fmt)
             plt.savefig(os.path.join(output_dir, filename))
 
         save_confusion_matrix(
@@ -154,6 +150,7 @@ class Inference:
             index=list(self.class_to_idx.keys()),
             output_dir=output_dir,
             filename="confusion_matrix.jpg",
+            fmt="g",
         )
 
         save_confusion_matrix(
@@ -161,6 +158,7 @@ class Inference:
             index=list(self.class_to_idx.keys()),
             output_dir=output_dir,
             filename="confusion_matrix_normal.jpg",
+            fmt=".3f",
         )
 
         return confusion_matrix

@@ -12,6 +12,8 @@ import soundfile
 from tqdm import tqdm
 from omegaconf import OmegaConf
 
+MINIMUM_SAMPLE = 3
+
 
 def load_meta(meta_file):
     meta = OmegaConf.load(meta_file)
@@ -28,23 +30,25 @@ def get_segments_by_meta(meta):
     return lcfg.Segmentations
 
 
-def count_samples_per_class(meta_dir, meta_files=None):
+def count_samples_per_class(meta_dir, metas=None):
     data_count_dict = defaultdict(int)
-    if meta_files is None:
+    if metas is None:
         meta_files = get_meta_files_from(meta_dir, verbose=False)
-    for meta_file in tqdm(meta_files):
-        meta = OmegaConf.load(meta_file)
+        metas = load_metas(meta_files)
+
+    for meta in tqdm(metas):
         class_id = get_class_id_by_meta(meta)
         data_count_dict[class_id] += 1
     return data_count_dict
 
 
-def count_segments_per_class(meta_dir, meta_files=None):
+def count_segments_per_class(meta_dir, metas=None):
     data_count_dict = defaultdict(int)
-    if meta_files is None:
+    if metas is None:
         meta_files = get_meta_files_from(meta_dir, verbose=False)
-    for meta_file in tqdm(meta_files):
-        meta = OmegaConf.load(meta_file)
+        metas = load_metas(meta_files)
+
+    for meta in tqdm(metas):
         class_id = get_class_id_by_meta(meta)
         num_segments = len(get_segments_by_meta(meta))
         data_count_dict[class_id] += num_segments
@@ -52,15 +56,19 @@ def count_segments_per_class(meta_dir, meta_files=None):
 
 
 def determine_split(
-    meta_file, total_sample_count, current_count, val_split=0.1, test_split=0.1
+    meta,
+    total_sample_count,
+    current_count,
+    val_split=0.1,
+    test_split=0.1,
+    minimum_count=3,
 ):
-    meta = load_meta(meta_file)
     class_id = get_class_id_by_meta(meta)
     split = "train"
     total_number = total_sample_count[class_id]
 
     # not enough samples for split
-    if total_number < 3:
+    if total_number < minimum_count:
         current_count[class_id] += 1
         return "val"
 
@@ -77,22 +85,20 @@ def determine_split(
     return split
 
 
-def process_meta(meta_file, output, split="val"):
-    meta = load_meta(meta_file)
+def process_meta(meta, audio_file, output_dir, split="val"):
     class_id = get_class_id_by_meta(meta)
     label_meta = meta["LabelDataInfo"]
-    audio_file = meta_file.replace(".json", ".mp3")
 
     warnings.filterwarnings("ignore")
     y, sr = librosa.load(audio_file, sr=16000, mono=True)
 
     # TODO : Train/Validation Split은 sample 기준으로 대략 8:2 지향, 어느 split에 속하는지는 파이썬 내장 hash함수 이용
-    output_dir = os.path.join(output, split, class_id)
-    os.makedirs(output_dir, exist_ok=True)
+    audio_output_dir = os.path.join(output_dir, split, class_id)
+    os.makedirs(audio_output_dir, exist_ok=True)
 
     for i, interval in enumerate(label_meta.Segmentations):
         output_path = os.path.join(
-            output_dir,
+            audio_output_dir,
             os.path.basename(audio_file).replace(".mp3", f"_{i}.wav"),
         )
         segment = y[int(interval[0] * sr) : int(interval[1] * sr)]
@@ -109,6 +115,13 @@ def get_meta_files_from(meta_dir, verbose=True):
     return meta_files
 
 
+def load_metas(meta_files):
+    metas = []
+    for meta_file in tqdm(meta_files):
+        metas.append(load_meta(meta_file))
+    return metas
+
+
 def print_pretty_dict(dic):
     list_dic = sorted([(k, v) for k, v in dic.items()], key=lambda x: x[0])
     string = str()
@@ -122,7 +135,7 @@ def remove_invalid_class(output_dir, verbose=True):
     개수가 적어서 validation에만 있는 클래스 데이터는 삭제.
     """
     train_ids = os.listdir(os.path.join(output_dir, "train"))
-    valid_ids = os.listdir(os.path.join(output_dir, "val"))
+    valid_ids = sorted(os.listdir(os.path.join(output_dir, "val")))
     if verbose:
         print("삭제된 id 목록")
     for class_id in valid_ids:
@@ -138,9 +151,10 @@ def remove_invalid_class(output_dir, verbose=True):
 def main(meta_dir, output_dir, verbose=True):
     meta_files = get_meta_files_from(meta_dir, verbose=verbose)
     assert len(meta_files) > 0, "Not enough metafiles"
+    metas = load_metas(meta_files)
 
-    total_sample_count = count_samples_per_class(meta_dir, meta_files=meta_files)
-    total_segment_count = count_segments_per_class(meta_dir, meta_files=meta_files)
+    total_sample_count = count_samples_per_class(meta_dir, metas=metas)
+    total_segment_count = count_segments_per_class(meta_dir, metas=metas)
 
     current_count = defaultdict(int)
     if verbose:
@@ -152,20 +166,23 @@ def main(meta_dir, output_dir, verbose=True):
         )
 
     def meta_iterator():
-        pbar = tqdm(meta_files)
-        for meta_file in pbar:
+        pbar = tqdm(list(zip(metas, meta_files)))
+        for meta, meta_file in pbar:
             pbar.set_description(meta_file)
             split = determine_split(
-                meta_file,
+                meta=meta,
                 total_sample_count=total_sample_count,
                 current_count=current_count,
+                minimum_count=MINIMUM_SAMPLE,
             )
-            yield meta_file, output_dir, split
+
+            audio_file = meta_file.replace(".json", ".mp3")
+            yield meta, audio_file, output_dir, split
 
     # TODO : data 늘어나면 data split 바꾸고 n_jobs 늘리기
     num_segments = Parallel(n_jobs=multiprocessing.cpu_count())(
-        delayed(process_meta)(meta_file, output_dir, split)
-        for meta_file, output_dir, split in meta_iterator()
+        delayed(process_meta)(meta, audio_file, output_dir, split)
+        for meta, audio_file, output_dir, split in meta_iterator()
     )
 
     print("# of segments :", sum(num_segments))

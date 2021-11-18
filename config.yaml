@@ -1,21 +1,22 @@
 model: "resnet18"
 
 dataset:
-  path: "/data_segments/"
-  use_major_class: True
+  path: "/data_segments/no_threshold/"
+  use_major_class: False
 
 pipe:
   n_fft: 2048
   hop_length: 256
   sample_rate: 16000
-  target_frame_length: 64
-  n_mels: 128
+  target_audio_sample_length: 16384
+  n_mels: 40
+  use_log: false
   min_audio_sample_length: 16384
 
 training:
   batch_size: 128
   num_workers: 8
-  max_epochs: 100
-  log_every_n_steps: 10
+  max_epochs: 50
+  log_every_n_steps: 5
   learning_rate: 0.001
   logdir: "/lightning_logs/"

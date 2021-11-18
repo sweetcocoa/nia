@@ -11,8 +11,6 @@ from pytorch_lightning.loggers import TensorBoardLogger
 from omegaconf import OmegaConf
 from task import ClassificationTaskHpSave
 
-# from flash.core.classification import ClassificationTask
-
 from model import SimpleAudioClassificationModel
 from training_utils import extract_logs, get_dataset
 
@@ -76,6 +74,7 @@ Dataset Summary:
 
     model = SimpleAudioClassificationModel(
         num_classes=len(dataset_val.classes),
+        pipe_config=config.pipe,
         model=config.model,
     )
 
