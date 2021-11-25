@@ -141,7 +141,8 @@ class Inference:
             fmt=".3f",
         ):
             df_cm = pd.DataFrame(confusion_matrix, index=index, columns=index)
-            plt.figure(figsize=(30, 21))
+            figsize = (len(self.class_to_idx), int(len(self.class_to_idx) * 0.7))
+            plt.figure(figsize=figsize)
             sn.heatmap(df_cm, annot=True, fmt=fmt)
             plt.savefig(os.path.join(output_dir, filename))
 

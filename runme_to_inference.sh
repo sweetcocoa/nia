@@ -1,27 +1,27 @@
-HP_POSTFIX='h8_f6_log'
-LOGDIR='/lightning_logs/default'
+HP_POSTFIX='baseline'
+LOGDIR='/lightning_logs/threshold_100/default/'
 
-for MODEL in vgg16 mobilenetv2 resnet18
+for MODEL in mobilenetv2 resnet18 resnet34
 do
 	MODEL_CKPT_DIR=${LOGDIR}/${MODEL}_${HP_POSTFIX}/checkpoints
 	CUDA_VISIBLE_DEVICES=2 python inference_utils.py --checkpoint ${MODEL_CKPT_DIR}/$(ls ${MODEL_CKPT_DIR} | grep model) &
 	sleep 1
 done
 
-HP_POSTFIX='h8_f6_log_mel128'
+HP_POSTFIX='mel128'
 
-for MODEL in vgg16 mobilenetv2 resnet18
+for MODEL in mobilenetv2 resnet18 resnet34
 do
 	MODEL_CKPT_DIR=${LOGDIR}/${MODEL}_${HP_POSTFIX}/checkpoints
 	CUDA_VISIBLE_DEVICES=3 python inference_utils.py --checkpoint ${MODEL_CKPT_DIR}/$(ls ${MODEL_CKPT_DIR} | grep model) &
 	sleep 1
 done
 
-HP_POSTFIX='h8_f6_linear'
+HP_POSTFIX='second_2'
 
-for MODEL in vgg16 mobilenetv2 resnet18
+for MODEL in mobilenetv2 resnet18 resnet34
 do
 	MODEL_CKPT_DIR=${LOGDIR}/${MODEL}_${HP_POSTFIX}/checkpoints
-	CUDA_VISIBLE_DEVICES=3 python inference_utils.py --checkpoint ${MODEL_CKPT_DIR}/$(ls ${MODEL_CKPT_DIR} | grep model) &
+	CUDA_VISIBLE_DEVICES=1 python inference_utils.py --checkpoint ${MODEL_CKPT_DIR}/$(ls ${MODEL_CKPT_DIR} | grep model) &
 	sleep 1
 done

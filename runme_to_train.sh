@@ -1,18 +1,17 @@
-
-for MODEL in vgg16 mobilenetv2 resnet18
+for MODEL in mobilenetv2 resnet18 resnet34
 do
-	CUDA_VISIBLE_DEVICES=2 python train.py model=\'${MODEL}\' training.version=\'${MODEL}_h8_f6_log\' pipe.use_log=True &
+	CUDA_VISIBLE_DEVICES=2 python train.py model=\'${MODEL}\' training.version=\'${MODEL}_baseline\' &
 	sleep 10
 done
 
-for MODEL in vgg16 mobilenetv2 resnet18
+for MODEL in mobilenetv2 resnet18 resnet34
 do
-	CUDA_VISIBLE_DEVICES=3 python train.py model=\'${MODEL}\' training.version=\'${MODEL}_h8_f6_linear\' pipe.use_log=False &
+	CUDA_VISIBLE_DEVICES=1 python train.py model=\'${MODEL}\' training.version=\'${MODEL}_mel128\' pipe.n_mels=128 &
 	sleep 10
 done
 
-for MODEL in vgg16 mobilenetv2 resnet18
+for MODEL in mobilenetv2 resnet18 resnet34
 do
-	CUDA_VISIBLE_DEVICES=1 python train.py model=\'${MODEL}\' training.version=\'${MODEL}_h8_f6_log_mel128\' pipe.n_mels=128 pipe.use_log=True &
+	CUDA_VISIBLE_DEVICES=3 python train.py model=\'${MODEL}\' training.version=\'${MODEL}_second_2\' pipe.target_audio_sample_length=32768 pipe.min_audio_sample_length=32768 &
 	sleep 10
 done

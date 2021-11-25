@@ -12,7 +12,7 @@ import soundfile
 from tqdm import tqdm
 from omegaconf import OmegaConf
 
-MINIMUM_SAMPLE = 3
+MINIMUM_SAMPLE = 100
 
 
 def load_meta(meta_file):
@@ -116,9 +116,12 @@ def get_meta_files_from(meta_dir, verbose=True):
 
 
 def load_metas(meta_files):
-    metas = []
-    for meta_file in tqdm(meta_files):
-        metas.append(load_meta(meta_file))
+    """
+    Parallel module은 order를 보존함.
+    """
+    metas = Parallel(n_jobs=multiprocessing.cpu_count())(
+        delayed(load_meta)(meta_file) for meta_file in tqdm(meta_files)
+    )
     return metas
 
 

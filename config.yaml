@@ -1,7 +1,7 @@
 model: "resnet18"
 
 dataset:
-  path: "/data_segments/no_threshold/"
+  path: "/data_segments/threshold_100/"
   use_major_class: False
 
 pipe:
@@ -10,13 +10,13 @@ pipe:
   sample_rate: 16000
   target_audio_sample_length: 16384
   n_mels: 40
-  use_log: false
+  use_log: true
   min_audio_sample_length: 16384
 
 training:
-  batch_size: 128
+  batch_size: 96
   num_workers: 8
   max_epochs: 50
   log_every_n_steps: 5
   learning_rate: 0.001
-  logdir: "/lightning_logs/"
+  logdir: "/lightning_logs/threshold_100/"
