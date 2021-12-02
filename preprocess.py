@@ -12,8 +12,6 @@ import soundfile
 from tqdm import tqdm
 from omegaconf import OmegaConf
 
-MINIMUM_SAMPLE = 100
-
 
 def load_meta(meta_file):
     meta = OmegaConf.load(meta_file)
@@ -151,7 +149,7 @@ def remove_invalid_class(output_dir, verbose=True):
         print(f"학습용데이터ids: {len(train_ids)}\n원본데이터ids: {len(valid_ids)}")
 
 
-def main(meta_dir, output_dir, verbose=True):
+def main(meta_dir, output_dir, minimum_sample, verbose=True):
     meta_files = get_meta_files_from(meta_dir, verbose=verbose)
     assert len(meta_files) > 0, "Not enough metafiles"
     metas = load_metas(meta_files)
@@ -176,7 +174,7 @@ def main(meta_dir, output_dir, verbose=True):
                 meta=meta,
                 total_sample_count=total_sample_count,
                 current_count=current_count,
-                minimum_count=MINIMUM_SAMPLE,
+                minimum_count=minimum_sample,
             )
 
             audio_file = meta_file.replace(".json", ".mp3")
@@ -198,5 +196,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--input", type=str, required=True)
     parser.add_argument("--output", type=str, required=True)
+    parser.add_argument("--minimum_sample", type=int, required=True)
     args = parser.parse_args()
-    main(args.input, args.output)
+    main(args.input, args.output, args.minimum_sample)
