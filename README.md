@@ -15,7 +15,7 @@ docker run \
         nia:211111
 ```
 ```bash
-python preprocess.py --input /data_midterm/ --output /data_segments/
+python preprocess.py --input_dir /data_midterm/ --output_dir /data_segments/ --minimum_sample 100 --sample_rate 16000
 python train.py
 python inference_utils.py --checkpoint /path/to/ckpt.pth
 ```

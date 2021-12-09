@@ -28,10 +28,10 @@ def get_segments_by_meta(meta):
     return lcfg.Segmentations
 
 
-def count_samples_per_class(meta_dir, metas=None):
+def count_samples_per_class(input_dir, metas=None):
     data_count_dict = defaultdict(int)
     if metas is None:
-        meta_files = get_meta_files_from(meta_dir, verbose=False)
+        meta_files = get_meta_files_from(input_dir, verbose=False)
         metas = load_metas(meta_files)
 
     for meta in tqdm(metas):
@@ -40,10 +40,10 @@ def count_samples_per_class(meta_dir, metas=None):
     return data_count_dict
 
 
-def count_segments_per_class(meta_dir, metas=None):
+def count_segments_per_class(input_dir, metas=None):
     data_count_dict = defaultdict(int)
     if metas is None:
-        meta_files = get_meta_files_from(meta_dir, verbose=False)
+        meta_files = get_meta_files_from(input_dir, verbose=False)
         metas = load_metas(meta_files)
 
     for meta in tqdm(metas):
@@ -83,12 +83,12 @@ def determine_split(
     return split
 
 
-def process_meta(meta, audio_file, output_dir, split="val"):
+def process_meta(meta, audio_file, output_dir, split="val", sample_rate=16000):
     class_id = get_class_id_by_meta(meta)
     label_meta = meta["LabelDataInfo"]
 
     warnings.filterwarnings("ignore")
-    y, sr = librosa.load(audio_file, sr=16000, mono=True)
+    y, sr = librosa.load(audio_file, sr=sample_rate, mono=True)
 
     # TODO : Train/Validation Split은 sample 기준으로 대략 8:2 지향, 어느 split에 속하는지는 파이썬 내장 hash함수 이용
     audio_output_dir = os.path.join(output_dir, split, class_id)
@@ -105,8 +105,8 @@ def process_meta(meta, audio_file, output_dir, split="val"):
     return num_segments
 
 
-def get_meta_files_from(meta_dir, verbose=True):
-    meta_files = sorted(glob.glob(os.path.join(meta_dir, "**/*.json"), recursive=True))
+def get_meta_files_from(input_dir, verbose=True):
+    meta_files = sorted(glob.glob(os.path.join(input_dir, "**/*.json"), recursive=True))
     meta_files = list(filter(lambda x: x.find("label") == -1, meta_files))
     if verbose:
         print("# of json :", len(meta_files))
@@ -149,13 +149,13 @@ def remove_invalid_class(output_dir, verbose=True):
         print(f"학습용데이터ids: {len(train_ids)}\n원본데이터ids: {len(valid_ids)}")
 
 
-def main(meta_dir, output_dir, minimum_sample, verbose=True):
-    meta_files = get_meta_files_from(meta_dir, verbose=verbose)
+def main(input_dir, output_dir, minimum_sample, sample_rate, verbose=True):
+    meta_files = get_meta_files_from(input_dir, verbose=verbose)
     assert len(meta_files) > 0, "Not enough metafiles"
     metas = load_metas(meta_files)
 
-    total_sample_count = count_samples_per_class(meta_dir, metas=metas)
-    total_segment_count = count_segments_per_class(meta_dir, metas=metas)
+    total_sample_count = count_samples_per_class(input_dir, metas=metas)
+    total_segment_count = count_segments_per_class(input_dir, metas=metas)
 
     current_count = defaultdict(int)
     if verbose:
@@ -182,7 +182,7 @@ def main(meta_dir, output_dir, minimum_sample, verbose=True):
 
     # TODO : data 늘어나면 data split 바꾸고 n_jobs 늘리기
     num_segments = Parallel(n_jobs=multiprocessing.cpu_count())(
-        delayed(process_meta)(meta, audio_file, output_dir, split)
+        delayed(process_meta)(meta, audio_file, output_dir, split, sample_rate)
         for meta, audio_file, output_dir, split in meta_iterator()
     )
 
@@ -194,8 +194,9 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="")
-    parser.add_argument("--input", type=str, required=True)
-    parser.add_argument("--output", type=str, required=True)
+    parser.add_argument("--input_dir", type=str, required=True)
+    parser.add_argument("--output_dir", type=str, required=True)
     parser.add_argument("--minimum_sample", type=int, required=True)
+    parser.add_argument("--sample_rate", type=int, required=True)
     args = parser.parse_args()
-    main(args.input, args.output, args.minimum_sample)
+    main(**vars(args))
