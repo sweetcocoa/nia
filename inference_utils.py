@@ -23,6 +23,7 @@ class Inference:
         device="cuda",
         class_to_idx=None,
         idx_to_class=None,
+        model=None,
     ):
 
         pipe_config = config.pipe
@@ -42,10 +43,16 @@ class Inference:
             else:
                 self.idx_to_class = self.model.idx_to_class
 
-        self.model = self.load_checkpoint(checkpoint_path, config)
-        self.min_audio_sample_length = pipe_config.min_audio_sample_length
         self.device = device
-        self.model = self.model.to(self.device)
+
+        if model is not None:
+            self.model = model.to(self.device)
+            self.model.eval()
+        else:
+            self.model = self.load_checkpoint(checkpoint_path, config)
+            self.model = self.model.to(self.device)
+
+        self.min_audio_sample_length = pipe_config.min_audio_sample_length
 
     def load_checkpoint(self, checkpoint_path, config):
         def build_weight_only(experiment_state_dict):
@@ -55,7 +62,7 @@ class Inference:
             return model_state_dict
 
         model = SimpleAudioClassificationModel(
-            len(self.class_to_idx), pipe_config=config.pipe, model=config.model
+            model_config=config.model, pipe_config=config.pipe
         )
         experiment_state_dict = torch.load(checkpoint_path)
         model_state_dict = build_weight_only(experiment_state_dict)
@@ -108,7 +115,7 @@ class Inference:
         pred_list = list()
 
         with torch.no_grad():
-            for img, label in tqdm(dataloader_test):
+            for i, (img, label) in enumerate(tqdm(dataloader_test)):
                 img, label = img.to(self.device), label.to(self.device)
                 pred = torch.softmax(self.model(img), dim=-1)
                 correct += (pred.argmax(dim=-1) == label).sum()
@@ -140,11 +147,14 @@ class Inference:
             filename="confusion_matrix.jpg",
             fmt=".3f",
         ):
+            output_filename = os.path.join(output_dir, filename)
             df_cm = pd.DataFrame(confusion_matrix, index=index, columns=index)
             figsize = (len(self.class_to_idx), int(len(self.class_to_idx) * 0.7))
             plt.figure(figsize=figsize)
             sn.heatmap(df_cm, annot=True, fmt=fmt)
-            plt.savefig(os.path.join(output_dir, filename))
+            plt.savefig(output_filename)
+            torch.save(confusion_matrix, output_filename + ".pth")
+            df_cm.to_csv(output_filename + ".csv")
 
         save_confusion_matrix(
             confusion_matrix=confusion_matrix,
@@ -174,8 +184,6 @@ if __name__ == "__main__":
     parser.add_argument("--config", type=str, default=None)
     args = parser.parse_args()
 
-    # config = OmegaConf.load("config.yaml")
-    # config.merge_with_cli()
     if args.checkpoint is None:
         print(
             """Usage:

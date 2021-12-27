@@ -1,4 +1,7 @@
-model: "resnet18"
+model: 
+  name: "mobilenetv2"
+  num_classes: -1
+  pretrained: true
 
 dataset:
   path: "/data_segments/threshold_100/"
@@ -7,16 +10,26 @@ dataset:
 pipe:
   n_fft: 2048
   hop_length: 256
-  sample_rate: 16000
-  target_audio_sample_length: 16384
-  n_mels: 40
+  sample_rate: 22050
+  target_audio_sample_length: 90316
+  n_mels: 128
   use_log: true
-  min_audio_sample_length: 16384
+  min_audio_sample_length: 90316
+  db_scale: false
+  augment:
+    do: true
+    freq_masking: 0.25
+    time_masking: 0.25
 
 training:
-  batch_size: 48
+  batch_size: 96
   num_workers: 8
   max_epochs: 50
-  log_every_n_steps: 5
+  log_every_n_steps: 500
+  optimizer: adam
   learning_rate: 0.001
+  lr_scheduler: "multisteplr"
   logdir: "/lightning_logs/threshold_100/"
+  auto_lr_find: true
+  weighted_sampling: true
+  label_smoothing: 0.1

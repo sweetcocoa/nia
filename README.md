@@ -12,21 +12,16 @@ docker run \
         -v ${PREPROCESS_FOLDER}:/data_segments \
         -v ${LOG_FOLDER}:/lightning_logs \
         -p 0.0.0.0:9015:9015 \
-        nia:211111
-```
-```bash
-python preprocess.py --input_dir /data_midterm/ --output_dir /data_segments/ --minimum_sample 100 --sample_rate 16000
-python train.py
-python inference_utils.py --checkpoint /path/to/ckpt.pth
+        nia:211227
 ```
 
 ### Preprocess Audio (Extract Audio Segments, split data)
 
 ```bash
-python preprocess --input /path/to/containing/mp3_and_json --output /path/to/segment_data/
+python preprocess --input /path/to/containing/mp3_and_json --output /path/to/segment_data/ --minimum_sample 100 --sample_rate 22050
 ```
 
-- Dataset Folder Preview
+- Preview of Preprocessed Dataset Folder 
 
 ```
 segment_data/
@@ -56,31 +51,27 @@ segment_data/
         ...
 ```
 
-### Reproduce All the Results
+### Reproduce One Results
+---
 ```bash
-bash runme_to_training.sh
-bash runme_to_inference.sh
+python train.py dataset.path=/path/to/segment/folder 
 ```
+
+### Reproduce All the Results
+---
+```bash
+python sweep.py
+```
+
+- You can check result logs at /lightning_logs/
 
 ### Training
 
 ```bash
-python train.py dataset.path=/path/to/segment_data/ training.batch_size=128
+python train.py dataset.path=/path/to/segment_data/ training.batch_size=96
 ```
 
 ### Tensorboard
 ```bash
 tensorboard --logdir lightning_logs/ --bind_all --port 9015
-```
-
-### Jupyter Lab
-```bash
-jupyter lab --allow-root --port 9015 --no-browser --ip 0.0.0.0
-```
-
-### Inference
-- Script
-```bash
-python inference_utils.py checkpoint=lightning_logs/version_0/checkpoints/model-epoch\=0031-val_f1\=0.621.ckpt
-# Image file : confusion_matrix.jpg will be created in version folder.
 ```

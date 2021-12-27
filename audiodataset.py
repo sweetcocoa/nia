@@ -1,7 +1,10 @@
-import torch
-from torch.utils.data.dataset import Dataset
 import os
 import glob
+from collections import Counter
+
+import torch
+from torch.utils.data.dataset import Dataset
+from torch.utils.data.sampler import WeightedRandomSampler
 
 from common_utils import get_major_class_by_class_name
 
@@ -35,8 +38,13 @@ class AudioDataset(Dataset):
         )
 
         self.labels = [self.class_to_idx[cls_name] for cls_name in self.cls_names]
-
         self.samples = [(self.paths[i], self.labels[i]) for i in range(len(self.paths))]
+
+    def save_counter(self, path):
+        counter = Counter(self.cls_names)
+        with open(path, "w") as f:
+            for k, v in sorted(counter.items(), key=lambda x: x[0]):
+                f.write(f"{k}, {v}\n")
 
     @staticmethod
     def get_labels_from_path(path):
@@ -64,3 +72,13 @@ class AudioDataset(Dataset):
 
     def __len__(self):
         return len(self.samples)
+
+    def get_weighted_sampler(self):
+        counter = Counter(self.cls_names)
+        # TODO : smoothing??
+        for k, v in counter.items():
+            counter[k] = min(1500, v)
+            # counter[k] = math.log2(v)
+        weights = [1.0 / counter[k] for k in self.cls_names]
+        weighted_sampler = WeightedRandomSampler(weights, num_samples=len(self))
+        return weighted_sampler

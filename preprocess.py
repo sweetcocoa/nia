@@ -177,7 +177,9 @@ def main(input_dir, output_dir, minimum_sample, sample_rate, verbose=True):
                 minimum_count=minimum_sample,
             )
 
-            audio_file = meta_file.replace(".json", ".mp3")
+            audio_file = meta_file.replace(".json", ".mp3").replace("라벨링데이터", "원천데이터")
+            if not os.path.exists(audio_file):
+                raise ValueError("Not exist : ", meta_file, audio_file)
             yield meta, audio_file, output_dir, split
 
     # TODO : data 늘어나면 data split 바꾸고 n_jobs 늘리기
